@@ -3,12 +3,20 @@
 try:
     import os
     import time
+    import sys
     import re
+    import subprocess
     from sonic_sfp.sfputilbase import SfpUtilBase
 except ImportError, e:
     raise ImportError (str(e) + "- required module not found")
 
+if sys.version_info[0] < 3:
+        import commands as cmd
+else:
+        import subprocess as cmd
+
 smbus_present = 1
+output = ""
 
 try:
     import smbus
@@ -17,47 +25,62 @@ except ImportError, e:
 
 class SfpUtil(SfpUtilBase):
     """Platform specific sfputil class"""
+    cmd = "sonic-cfggen -d -v 'DEVICE_METADATA[" + "\"localhost\"" + "][" + "\"hwsku\"" + "]'"
+    output = subprocess.check_output(cmd, shell=True)
+    if(output == "falcondb\n"):
+        _port_start = 1
+        _port_end = 32
+        ports_in_block = 32
 
-    _port_start = 49
-    _port_end = 52
-    ports_in_block = 4
+        _port_to_eeprom_mapping = {}
+        port_to_i2c_mapping = {
+             1 : 0,
+             2 : 0,
+             3 : 0,
+             4 : 0,
+             5 : 0,
+             6 : 0,
+             7 : 0,
+             8 : 0,
+             9 : 0,
+             10 : 0,
+             11 : 0,
+             12 : 0,
+             13 : 0,
+             14 : 0,
+             15 : 0,
+             16 : 0,
+             17 : 0,
+             18 : 0,
+             19 : 0,
+             20 : 0,
+             21 : 0,
+             22 : 0,
+             23 : 0,
+             24 : 0,
+             25 : 0,
+             26 : 0,
+             27 : 0,
+             28 : 0,
+             29 : 0,
+             30 : 0,
+             31 : 0,
+             32 : 0
+        }
 
-    _port_to_eeprom_mapping = {}
-    port_to_i2c_mapping = {
-         49 : 0,
-         50 : 0,
-         51 : 0,
-         52 : 0
-    }
-
-    _qsfp_ports = range(_port_start, ports_in_block + 1)
+        _qsfp_ports = range(_port_start, ports_in_block + 1)
 
     def __init__(self):
-        # Override port_to_eeprom_mapping for class initialization
-    	if not os.path.exists("/sys/class/gpio/gpio50/") :
-            os.system("echo 50 >  /sys/class/gpio/gpiochip32/subsystem/export")
-    	if not os.path.exists("/sys/class/gpio/gpio52/") :
-            os.system("echo 52 >  /sys/class/gpio/gpiochip32/subsystem/export")
-    	os.system("echo out > /sys/class/gpio/gpio50/direction")
-    	os.system("echo out > /sys/class/gpio/gpio52/direction ")
-
         if not os.path.exists("/sys/bus/i2c/devices/0-0050") :
             os.system("echo optoe2 0x50 > /sys/bus/i2c/devices/i2c-0/new_device")
 
         eeprom_path = '/sys/bus/i2c/devices/0-0050/eeprom'
-        for x in range(self.port_start, self.port_end + 1):
+        #for x in range(self.port _start, self.port_end +1):
+        x = self.port_start
+        while(x<self.port_end+1):
             port_eeprom_path = eeprom_path.format(self.port_to_i2c_mapping[x])
             self.port_to_eeprom_mapping[x] = port_eeprom_path
-        # Enable optical SFP Tx
-        if smbus_present == 0 :
-            os.system("i2cset -y -m 0x0f 0 0x41 0x5 0x00")
-        else :
-            bus = smbus.SMBus(0)
-            DEVICE_ADDRESS = 0x41
-            DEVICEREG = 0x5 
-            OPTIC_E =  bus.read_byte_data(DEVICE_ADDRESS, DEVICEREG)
-            OPTIC_E = OPTIC_E & 0xf0
-            bus.write_byte_data(DEVICE_ADDRESS, DEVICEREG, OPTIC_E) 
+            x = x + 1
         SfpUtilBase.__init__(self)
 
     def reset(self, port_num):
@@ -88,51 +111,68 @@ class SfpUtil(SfpUtilBase):
 
     def get_low_power_mode(self, port_num):
         raise NotImplementedError
+
+    def i2c_get(self, device_addr, offset):
+        status = 0
+        if smbus_present == 0:
+            x = "i2cget -y 0 " + hex(device_addr) + " " + hex(offset)
+            cmdstatus, status = cmd.getstatusoutput(x)
+            if cmdstatus != 0:
+                return cmdstatus
+            status = int(status, 16)
+        else:
+            bus = smbus.SMBus(0)
+            status = bus.read_byte_data(device_addr, offset)
+        return status
+
+    def i2c_set(self, device_addr, offset, value):
+        if smbus_present == 0:
+            cmd = "i2cset -y 0 " + hex(device_addr) + " " + hex(offset) + " " + hex(value)
+            os.system(cmd)
+        else:
+            bus = smbus.SMBus(0)
+            bus.write_byte_data(device_addr, offset, value)
       
     def get_presence(self, port_num):
         # Check for invalid port_num
         if port_num < self._port_start or port_num > self._port_end:
             return False
-    	prt = port_num % 49
-    	prt = "{0:02b}".format(prt)
-    	p = prt[0]
-    	q = prt[1]
-    	cmd1 = "echo " + q + " > /sys/class/gpio/gpio50/value"
-    	cmd2 = "echo " + p + " > /sys/class/gpio/gpio52/value"
-    	os.system(cmd1)
-    	os.system(cmd2)
+        else:
+            if(output == 'falcondb\n'):
+                self.i2c_set(0x70, 0, 0)
+                self.i2c_set(0x71, 0, 0)
+                self.i2c_set(0x72, 0, 0)
+                self.i2c_set(0x73, 0, 0)
+                offset = (port_num-1)%8
+                if offset >=4:
+                    offset=offset-4
+                elif offset<4:
+                    offset=offset+4
+                bin_offset =  1<<offset
+                reg = (port_num-1)/4
+ 
+                if reg == 0 or reg == 7:
+                    device_reg = 0x70
+                elif reg == 1 or reg == 2:
+                    device_reg = 0x71
+                elif reg == 3 or reg == 4:
+                    device_reg = 0x72
+                elif reg == 5 or reg == 6:
+                    device_reg = 0x73
 
-        '''if port_num == 49 :
-       	os.system("echo 0 > /sys/class/gpio/gpio50/value")
-       	os.system("echo 0 > /sys/class/gpio/gpio52/value")
-       if port_num == 50 :                         
-                   os.system("echo 0 > /sys/class/gpio/gpio50/value")
-                   os.system("echo 0 > /sys/class/gpio/gpio52/value")
-       if port_num == 51 :                         
-                   os.system("echo 0 > /sys/class/gpio/gpio50/value")
-                   os.system("echo 0 > /sys/class/gpio/gpio52/value")
-       if port_num == 52:                         
-                   os.system("echo 0 > /sys/class/gpio/gpio50/value")
-                   os.system("echo 0 > /sys/class/gpio/gpio52/value")'''
-        path = "/sys/bus/i2c/devices/0-0050/eeprom"
-        #port_ps = path.format(self.port_to_i2c_mapping[port_num+1])
+                self.i2c_set(device_reg, 0, bin_offset)
+                path = "/sys/bus/i2c/devices/0-0050/eeprom"
+                try:
+                    reg_file = open(path)
+                    reg_file.seek(01)
+                    reg_file.read(02)
+                except IOError as e:
+                    return False
 
-        try:
-            reg_file = open(path)
-            reg_file.seek(01)
-            reg_file.read(02)
-        except IOError as e:
-            #print "Error: unable to open file: %s" % str(e)
-	    
-            return False
-
-        #reg_value = reg_file.readline().rstrip()
-        #if reg_value == '1':
-        #    return True
-
-        return True
+                return True
 
     def read_porttab_mappings(self, porttabfile):
+        #print("I am in porttab_mappings")
         logical = []
         logical_to_bcm = {}
         logical_to_physical = {}
@@ -149,7 +189,6 @@ class SfpUtil(SfpUtilBase):
             raise
 
         parse_fmt_port_config_ini = (os.path.basename(porttabfile) == "port_config.ini")
-
         # Read the porttab file and generate dicts
         # with mapping for future reference.
         #
@@ -163,6 +202,7 @@ class SfpUtil(SfpUtilBase):
                 # Where the ordering of the columns can vary
                 title = line.split()[1:]
                 continue
+            #print title
 
             # Parsing logic for 'port_config.ini' file
             if (parse_fmt_port_config_ini):
@@ -172,17 +212,17 @@ class SfpUtil(SfpUtilBase):
                 portname = line.split()[0]
 
                 bcm_port = str(port_pos_in_file)
-		#print("portname " + portname)
+
 
                 if "index" in title:
                     fp_port_index = int(line.split()[title.index("index")])
                 # Leave the old code for backward compatibility
-                elif len(line.split()) >= 4:
-                    fp_port_index = int(line.split()[3])
+                #if len(line.split()) >= 4:
+                #    fp_port_index = (line.split()[3])
+                #    print(fp_port_index)     
                 else:
                     fp_port_index = portname.split("Ethernet").pop()
                     fp_port_index = int(fp_port_index.split("s").pop(0))+1
-		    #print(fp_port_index)
             else:  # Parsing logic for older 'portmap.ini' file
                 (portname, bcm_port) = line.split("=")[1].split(",")[:2]
 
@@ -234,8 +274,7 @@ class SfpUtil(SfpUtilBase):
         print("logical to bcm: " + self.logical_to_bcm)
         print("logical to physical: " + self.logical_to_physical)
         print("physical to logical: " + self.physical_to_logical)'''
-       
-
+        #print("exiting port_tab_mappings")
 
     @property
     def port_start(self):
