@@ -26,10 +26,10 @@ except ImportError, e:
 
 class SfpUtil(SfpUtilBase):
     """Platform specific sfputil class"""
-    if(output == "falcondb\n"):
+    if(output == "falcon16\n"):
         _port_start = 1
-        _port_end = 32
-        ports_in_block = 32
+        _port_end = 16
+        ports_in_block = 16
 
         _port_to_eeprom_mapping = {}
         port_to_i2c_mapping = {
@@ -49,22 +49,6 @@ class SfpUtil(SfpUtilBase):
              14 : 0,
              15 : 0,
              16 : 0,
-             17 : 0,
-             18 : 0,
-             19 : 0,
-             20 : 0,
-             21 : 0,
-             22 : 0,
-             23 : 0,
-             24 : 0,
-             25 : 0,
-             26 : 0,
-             27 : 0,
-             28 : 0,
-             29 : 0,
-             30 : 0,
-             31 : 0,
-             32 : 0
         }
 
         _qsfp_ports = range(_port_start, ports_in_block + 1)
@@ -137,27 +121,17 @@ class SfpUtil(SfpUtilBase):
         if port_num < self._port_start or port_num > self._port_end:
             return False
         else:
-            if(output == "falcondb\n"):
+            if(output == "falcon16\n"):
                 self.i2c_set(0x70, 0, 0)
                 self.i2c_set(0x71, 0, 0)
-                self.i2c_set(0x72, 0, 0)
-                self.i2c_set(0x73, 0, 0)
                 offset = (port_num-1)%8
-                if offset >=4:
-                    offset=offset-4
-                elif offset<4:
-                    offset=offset+4
                 bin_offset =  1<<offset
-                reg = (port_num-1)/4
+                reg = (port_num-1)/8
  
-                if reg == 0 or reg == 7:
+                if reg == 0:
                     device_reg = 0x70
-                elif reg == 1 or reg == 2:
+                elif reg == 1:
                     device_reg = 0x71
-                elif reg == 3 or reg == 4:
-                    device_reg = 0x72
-                elif reg == 5 or reg == 6:
-                    device_reg = 0x73
 
                 self.i2c_set(device_reg, 0, bin_offset)
                 path = "/sys/bus/i2c/devices/0-0050/eeprom"
