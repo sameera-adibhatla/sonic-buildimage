@@ -26,7 +26,7 @@ except ImportError, e:
 
 class SfpUtil(SfpUtilBase):
     """Platform specific sfputil class"""
-    if(output == "falcondb\n"):
+    if(output == "FALCON32X25G\n"):
         _port_start = 1
         _port_end = 32
         ports_in_block = 32
@@ -137,7 +137,7 @@ class SfpUtil(SfpUtilBase):
         if port_num < self._port_start or port_num > self._port_end:
             return False
         else:
-            if(output == "falcondb\n"):
+            if(output == "FALCON32X25G\n"):
                 self.i2c_set(0x70, 0, 0)
                 self.i2c_set(0x71, 0, 0)
                 self.i2c_set(0x72, 0, 0)
